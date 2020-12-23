@@ -42,5 +42,21 @@ CHIP ALU {
         ng; // 1 if (out < 0),  0 otherwise
 
     PARTS:
-   // Put you code here:
+    Mux16(a[0..15]=x[0..15], b[0..15]=false, sel=zx, out=zxm); // zero the x input
+    Not16(in[0..15]=zxm, out=nxmux); // negate the x input
+    Mux16(a[0..15]=zxm, b[0..15]=nxmux, sel=nx, out=nxm); // negate the x input
+    Mux16(a[0..15]=y[0..15], b[0..15]=false, sel=zy, out=zym); // zero the y input
+    Not16(in[0..15]=zym, out=nymux); // negate the y input
+    Mux16(a[0..15]=zym, b[0..15]=nymux, sel=ny, out=nyo); // negate the y input
+    Add16(a[0..15]=nxm, b[0..15]=nyo, out=xaddy);
+    And16(a[0..15]=nxm, b[0..15]=nyo, out=xandy);
+    Mux16(a[0..15]=xandy, b[0..15]=xaddy, sel=f, out=fxy); // compute out
+    Not16(in[0..15]=fxy, out=notfxy); // negate the out
+    Mux16(a[0..15]=fxy, b[0..15]=notfxy, sel=no, out[15]=andout, out[0..7]=bout1, out[8..15]=bout2); // negate the out
+    Mux16(a[0..15]=fxy, b[0..15]=notfxy, sel=no, out=out); // negate the out
+    And(a=andout, b=true, out=ng); // check negative value
+    Or8Way(in=bout1, out=o1);
+    Or8Way(in=bout2, out=o2);
+    Or(a=o1, b=o2, out=o3);
+    Not(in=o3, out=zr);
 }

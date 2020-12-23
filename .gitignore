@@ -2,3 +2,4 @@ tools/*
 *.hdl~
 *.hdl.un~
 *.out
+*.swp

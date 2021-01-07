@@ -15,5 +15,22 @@ CHIP RAM64 {
     OUT out[16];
 
     PARTS:
-    // Put your code here:
+    DMux8Way(in=true, a=aout, b=bout, c=cout, d=dout, e=eout, f=fout, g=gout, h=hout, sel[0..2]=address[3..5]);
+    And(a=aout, b=load, out=aload);
+    And(a=bout, b=load, out=bload);
+    And(a=cout, b=load, out=cload);
+    And(a=dout, b=load, out=dload);
+    And(a=eout, b=load, out=eload);
+    And(a=fout, b=load, out=fload);
+    And(a=gout, b=load, out=gload);
+    And(a=hout, b=load, out=hload);
+    RAM8(in=in, load=aload, address=address[0..2], out=aram);
+    RAM8(in=in, load=bload, address=address[0..2], out=bram);
+    RAM8(in=in, load=cload, address=address[0..2], out=cram);
+    RAM8(in=in, load=dload, address=address[0..2], out=dram);
+    RAM8(in=in, load=eload, address=address[0..2], out=eram);
+    RAM8(in=in, load=fload, address=address[0..2], out=fram);
+    RAM8(in=in, load=gload, address=address[0..2], out=gram);
+    RAM8(in=in, load=hload, address=address[0..2], out=hram);
+    Mux8Way16(a[0..15]=aram, b[0..15]=bram, c[0..15]=cram, d[0..15]=dram, e[0..15]=eram, f[0..15]=fram, g[0..15]=gram, h[0..15]=hram, sel[0..2]=address[3..5], out=out);
 }

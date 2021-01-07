@@ -3,3 +3,6 @@ tools/*
 *.hdl.un~
 *.out
 *.swp
+*.asm~
+*.asm.un~
+*.hack

@@ -39,5 +39,47 @@ CHIP CPU {
         pc[15];          // address of next instruction
 
     PARTS:
-    // Put your code here:
+    // op type
+    Not(in=instruction[15], out=isAop);
+    And(a=instruction[15], b=true, out=isCop);
+
+    // Mux to ARegister
+    Mux16(a=outMcopy, b=instruction, sel=isAop, out=toARegister);
+    // instruction[5] = dest area 1 d1
+    Or(a=isAop, b=instruction[5], out=setARegister);
+    ARegister(in=toARegister, load=setARegister, out[0..14]=addressM, out=addressMcopy);
+    // inMemory And ARegister to ALU
+    Mux16(a=addressMcopy, b=inM, sel=instruction[12], out=toALU);
+
+    // ALU
+    ALU(x=outD, y=toALU, zx=instruction[11], nx=instruction[10], zy=instruction[9], ny=instruction[8], f=instruction[7], no=instruction[6], out=outM, out=outMcopy, zr=zr, ng=ng);
+
+    // DRegister d2
+    And(a=isCop, b=instruction[4], out=saveDRegister);
+    DRegister(in=outMcopy, out=outD, load=saveDRegister);
+
+    // AddressM to PC
+    PC(in=addressMcopy, reset=reset, inc=isinc, load=isjump, out[0..14]=pc);
+
+    // flag write Memory d3
+    And(a=instruction[3], b=isCop, out=writeM);
+
+    // jump under zero
+    And(a=ng, b=instruction[2], out=ngjump);
+
+    // jump equal zero
+    And(a=zr, b=instruction[1], out=zerojump);
+
+    // jump over zero
+    Not(in=zr, out=notzero);
+    Not(in=ng, out=notng);
+    And(a=notzero, b=notng, out=gtzero);
+    And(a=gtzero, b=instruction[0], out=gtjump);
+
+    // PC jump flag
+    Or8Way(in[0]=ngjump, in[1]=zerojump, in[2]=gtjump, in[3..7]=false, out=jumpcond);
+    And(a=jumpcond, b=isCop, out=isjump);
+
+    // PC inc flag
+    Not(in=isjump, out=isinc);
 }

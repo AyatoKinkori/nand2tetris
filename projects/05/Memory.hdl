@@ -27,5 +27,25 @@ CHIP Memory {
     OUT out[16];
 
     PARTS:
-    // Put your code here:
+    And(a=address[14], b=load, out=skload);
+    Not(in=address[14], out=memload);
+    And(a=memload, b=load, out=memwrite);
+    RAM16K(in=in, load=memwrite, address=address[0..13], out=memout);
+
+    And(a=address[14], b=address[13], out=ktmp);
+    Or8Way(in[0..7]=address[0..7], out=ktmp2);
+    Or8Way(in[0..5]=address[8..13], out=ktmp3);
+    Or(a=ktmp2, b=ktmp3, out=ktmp4);
+    Not(in=ktmp4, out=ktmp5);
+    And(a=ktmp, b=ktmp5, out=iskey);
+    Keyboard(out=keyout);
+
+    Not(in=ktmp, out=lskb);
+    Or(a=address[14], b=address[13], out=upsc);
+    And(a=lskb, b=upsc, out=scrflag);
+    And(a=scrflag, b=load, out=scrload);
+    Screen(in=in, load=scrload, address[0..12]=address[2..14], out=scrout); 
+
+    Mux16(a=scrout, b=keyout, sel=iskey, out=keyscrout);
+    Mux16(a=keyscrout, b=memout, out=out, sel=memload);
 }

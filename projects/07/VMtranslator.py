@@ -414,7 +414,7 @@ class CodeWriter(object):
             elif segment == "pointer":
                 lines.append("@SP")
                 lines.append("M=M-1")
-                lines.append("@5")
+                lines.append("@3")
                 lines.append("D=A")
                 lines.append("@{}".format(index))
                 lines.append("D=D+A")

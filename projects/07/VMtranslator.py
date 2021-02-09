@@ -170,7 +170,8 @@ class CodeWriter(object):
         self.gt_if_use_count = 0
         self.lt_if_use_count = 0
         self.file = f
-        self.file_name = name
+        self.full_path = name
+        self.file_name = name.split("/")[-1]
         self.sys_init()
 
     def sys_init(self):
@@ -181,8 +182,8 @@ class CodeWriter(object):
         lines.append("M=D")
         self.writelines(lines)
 
-    def setFileName(self, file_name):
-        f = open("{}.asm".format(file_name), "w")
+    def setFileName(self, file_path):
+        f = open("{}.asm".format(file_path), "w")
         self.file = f
         self.sys_init()
 

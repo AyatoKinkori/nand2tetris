@@ -17,6 +17,8 @@ class CommandType(Enum):
 class FileParseError(Exception):
     pass
 
+SEG_CONS = {"local": "LCL", "argument": "ARG", "this": "THIS", "that": "THAT"}
+
 
 class Parser(object):
     def __init__(self, file_):
@@ -47,6 +49,22 @@ class Parser(object):
             return CommandType.C_ARITHMETIC
         elif self.is_push(command):
             return CommandType.C_PUSH
+        elif self.is_pop(command):
+            return CommandType.C_POP
+        elif self.is_label(command):
+            return CommandType.C_LABEL
+        elif self.is_call(command):
+            return CommandType.C_CALL
+        elif self.is_function(command):
+            return CommandType.C_FUNCTION
+        elif self.is_goto(command):
+            return CommandType.C_GOTO
+        elif self.is_return(command):
+            return CommandType.C_RETURN
+        elif self.is_call(command):
+            return CommandType.C_CALL
+        elif self.is_if(command):
+            return CommandType.C_IF
 
     def is_artithmetic(self, command):
         op = self.op()
@@ -62,6 +80,62 @@ class Parser(object):
 
         return False
 
+    def is_label(self, command):
+        op = self.op()
+        if op == "label":
+            return True
+
+        return False
+
+    def is_pop(self, command):
+        op = self.op()
+        if op == "pop":
+            return True
+
+        return False
+
+    def is_call(self, command):
+        op = self.op()
+        if op == "call":
+            return True
+
+        return False
+
+    def is_goto(self, command):
+        op = self.op()
+        if op == "goto":
+            return True
+
+        return False
+
+    def is_if(self, command):
+        op = self.op()
+        if op == "if-goto":
+            return True
+  
+        return False
+
+    def is_function(self, command):
+        op = self.op()
+        if op == "function":
+            return True
+
+        return False
+
+    def is_return(self, command):
+        op = self.op()
+        if op == "return":
+            return True 
+
+        return False
+
+    def is_call(self, command):
+        op = self.op()
+        if op == "call":
+            return True
+
+        return False
+
     def op(self):
         return self.command.split(" ")[0]
     
@@ -73,11 +147,19 @@ class Parser(object):
             return op
         elif self.commandType() == CommandType.C_PUSH:
             return arg1
+        elif self.commandType() == CommandType.C_POP:
+            return arg1
 
     def arg2(self):
         splited_command = self.command.split(" ")
         arg2 = splited_command[2]
         if self.commandType() == CommandType.C_PUSH:
+            return arg2
+        elif self.commandType() == CommandType.C_POP:
+            return arg2
+        elif self.commandType() == CommandType.C_FUNCTION:
+            return arg2
+        elif self.commandType() == CommandType.C_RETURN:
             return arg2
 
 
@@ -88,11 +170,21 @@ class CodeWriter(object):
         self.gt_if_use_count = 0
         self.lt_if_use_count = 0
         self.file = f
+        self.file_name = name
+        self.sys_init()
+
+    def sys_init(self):
+        lines = []
+        lines.append("@256")
+        lines.append("D=A")
+        lines.append("@SP")
+        lines.append("M=D")
+        self.writelines(lines)
 
     def setFileName(self, file_name):
-        self.close()
         f = open("{}.asm".format(file_name), "w")
         self.file = f
+        self.sys_init()
 
     def writelines(self, lines):
         lines = map(lambda x: x + "\n", lines)
@@ -247,6 +339,101 @@ class CodeWriter(object):
                 lines.append("M=D")
                 lines.append("@SP")
                 lines.append("M=M+1")
+            elif segment in ("local", "argument", "this", "that"):
+                lines.append("@{}".format(index))
+                lines.append("D=A")
+                lines.append("@{}".format(SEG_CONS[segment]))
+                lines.append("A=M+D")
+                lines.append("D=M")
+                lines.append("@SP")
+                lines.append("A=M")
+                lines.append("M=D")
+                lines.append("@SP")
+                lines.append("M=M+1")
+            elif segment == "temp":
+                lines.append("@5")
+                lines.append("D=A")
+                lines.append("@{}".format(index))
+                lines.append("A=A+D")
+                lines.append("D=M")
+                lines.append("@SP")
+                lines.append("A=M")
+                lines.append("M=D")
+                lines.append("@SP")
+                lines.append("M=M+1")
+            elif segment == "pointer":
+                lines.append("@3")
+                lines.append("D=A")
+                lines.append("@{}".format(index))
+                lines.append("A=A+D")
+                lines.append("D=M")
+                lines.append("@SP")
+                lines.append("A=M")
+                lines.append("M=D")
+                lines.append("@SP")
+                lines.append("M=M+1")
+            elif segment == "static":
+                lines.append("@{}.{}".format(self.file_name, index))
+                lines.append("D=M")
+                lines.append("@SP")
+                lines.append("A=M")
+                lines.append("M=D")
+                lines.append("@SP")
+                lines.append("M=M+1")
+        elif op == "pop":
+            if segment in ("local", "argument", "this", "that"):
+                lines.append("@SP")
+                lines.append("M=M-1")
+                lines.append("@{}".format(index))
+                lines.append("D=A")
+                lines.append("@{}".format(SEG_CONS[segment]))
+                lines.append("D=M+D")
+                lines.append("@13")
+                lines.append("M=D")
+                lines.append("@SP")
+                lines.append("A=M")
+                lines.append("D=M")
+                lines.append("@13")
+                lines.append("A=M")
+                lines.append("M=D")
+            elif segment == "temp":
+                lines.append("@SP")
+                lines.append("M=M-1")
+                lines.append("@5")
+                lines.append("D=A")
+                lines.append("@{}".format(index))
+                lines.append("D=D+A")
+                lines.append("@13")
+                lines.append("M=D")
+                lines.append("@SP")
+                lines.append("A=M")
+                lines.append("D=M")
+                lines.append("@13")
+                lines.append("A=M")
+                lines.append("M=D")
+            elif segment == "pointer":
+                lines.append("@SP")
+                lines.append("M=M-1")
+                lines.append("@5")
+                lines.append("D=A")
+                lines.append("@{}".format(index))
+                lines.append("D=D+A")
+                lines.append("@13")
+                lines.append("M=D")
+                lines.append("@SP")
+                lines.append("A=M")
+                lines.append("D=M")
+                lines.append("@13")
+                lines.append("A=M")
+                lines.append("M=D")
+            elif segment == "static":
+                lines.append("@SP")
+                lines.append("M=M-1")
+                lines.append("@SP")
+                lines.append("A=M")
+                lines.append("D=M")
+                lines.append("@{}.{}".format(self.file_name, index))
+                lines.append("M=D")
 
         self.writelines(lines)
 

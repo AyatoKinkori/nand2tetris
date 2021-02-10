@@ -152,6 +152,8 @@ class Parser(object):
             return arg1
         elif self.commandType() == CommandType.C_POP:
             return arg1
+        else:
+            return arg1
 
     def arg2(self):
         splited_command = self.command.split(" ")
@@ -441,6 +443,26 @@ class CodeWriter(object):
 
         self.writelines(lines)
 
+    def writeLabel(self, label):
+        lines = []
+        lines.append("({})".format(label))
+        self.writelines(lines)
+ 
+    def writeGoto(self, label):
+        lines = []
+        lines.append("@{}".format(label))
+        lines.append("0;JMP")
+        self.writelines(lines)
+
+    def writeIf(self, label):
+        lines = []
+        lines.append("@SP")
+        lines.append("AM=M-1")
+        lines.append("D=M")
+        lines.append("@{}".format(label))
+        lines.append("D;JNE")
+        self.writelines(lines)
+
     def close(self):
         lines = []
         lines.append("(END)")
@@ -457,7 +479,7 @@ def main():
     writer = None
     for file_path in files:
         f = file_open(file_path)
-        write_file_name = f.name.split(".")[0]
+        write_file_name = file_path.rstrip(".vm")
         parser = Parser(f)
         if not writer:
             writer = CodeWriter(write_file_name)
@@ -469,6 +491,18 @@ def main():
                 writer.writeArithmetic(parser.command)
             elif commandType in (CommandType.C_PUSH, CommandType.C_POP):
                 writer.writePushPop(parser.op(), parser.arg1(), parser.arg2())
+            elif commandType == CommandType.C_LABEL:
+                writer.writeLabel(parser.arg1())
+            elif commandType == CommandType.C_GOTO:
+                writer.writeGoto(parser.arg1())
+            elif commandType == CommandType.C_CALL:
+                writer.writeCall(parser.arg1(), parser.arg2())
+            elif commandType == CommandType.C_IF:
+                writer.writeIf(parser.arg1())
+            elif commandType == CommandType.C_RETURN:
+                writer.writeReturn()
+            elif commandType == CommandType.C_FUNCTION:
+                writer.writeFunction(parser.arg1(), parser.arg2())
 
             if not parser.hasMoreCommands():
                 break

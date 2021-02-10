@@ -1,3 +1,4 @@
+import os
 import sys
 from enum import Enum
 
@@ -13,6 +14,8 @@ class CommandType(Enum):
     C_RETURN = 7
     C_CALL = 8
 
+class FileNotExistError(Exception):
+    pass
 
 class FileParseError(Exception):
     pass
@@ -448,38 +451,55 @@ class CodeWriter(object):
 
 
 def main():
-    f = file_open()
-    write_file_name = f.name.split(".")[0]
-    parser = Parser(f)
-    writer = CodeWriter(write_file_name)
-    while True:
-        commandType = parser.commandType()
-        if commandType == CommandType.C_ARITHMETIC:
-            writer.writeArithmetic(parser.command)
-        elif commandType in (CommandType.C_PUSH, CommandType.C_POP):
-            writer.writePushPop(parser.op(), parser.arg1(), parser.arg2())
+    files = get_files()
+    if not files:
+        raise FileNotExistError("not passed target files")
+    writer = None
+    for file_path in files:
+        f = file_open(file_path)
+        write_file_name = f.name.split(".")[0]
+        parser = Parser(f)
+        if not writer:
+            writer = CodeWriter(write_file_name)
+        else:
+            writer.set_file_name(write_file_name)
+        while True:
+            commandType = parser.commandType()
+            if commandType == CommandType.C_ARITHMETIC:
+                writer.writeArithmetic(parser.command)
+            elif commandType in (CommandType.C_PUSH, CommandType.C_POP):
+                writer.writePushPop(parser.op(), parser.arg1(), parser.arg2())
 
-        if not parser.hasMoreCommands():
-            break
+            if not parser.hasMoreCommands():
+                break
         
-        parser.advance()
+            parser.advance()
 
     writer.close()
 
-def file_open():
-    value = sys.argv
-    if 1 >= len(value):
-        raise FileParseError("対象ファイルが指定されていません。")
+def get_files():
+    path = sys.argv[1]
+    files = []
+    if os.path.isdir(path):
+        with os.scandir(path) as it:
+            for entry in it:
+                if entry.is_file():
+                    split_name = entry.name.split(".")
+                    if "vm" == split_name[-1]:
+                        files.append(entry.path)
+    else:
+        files.append(path)
     
-    file_name = value[1]
-    print(file_name)
-    splited_file_name = file_name.split(".")
+    return files
+
+def file_open(file_path):
+    splited_file_name = file_path.split(".")
     if 1 >= len(splited_file_name):
         raise FileParseError("拡張子が指定されていません。")
     
     if "vm" != splited_file_name[-1]:
         raise FileParseError("vmファイルが指定されていません。")
-    f = open(file_name, "r")
+    f = open(file_path, "r")
     return f
 
 if __name__ == "__main__":

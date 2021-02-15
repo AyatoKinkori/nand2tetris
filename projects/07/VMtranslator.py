@@ -166,6 +166,8 @@ class Parser(object):
             return arg2
         elif self.commandType() == CommandType.C_RETURN:
             return arg2
+        elif self.commandType() == CommandType.C_CALL:
+            return arg2
 
 
 class CodeWriter(object):
@@ -177,20 +179,27 @@ class CodeWriter(object):
         self.file = f
         self.full_path = name
         self.file_name = name.split("/")[-1]
-        self.sys_init()
+        self.call_count = 0
+        #self.sys_init()
+
+    def _get_call_count(self):
+        count = self.call_count
+        self.call_count += 1
+        return count
 
     def sys_init(self):
         lines = []
+        # SP init
         lines.append("@256")
         lines.append("D=A")
         lines.append("@SP")
         lines.append("M=D")
         self.writelines(lines)
+        self.writeCall("Sys.init", "0")
 
-    def setFileName(self, file_path):
-        f = open("{}.asm".format(file_path), "w")
-        self.file = f
-        self.sys_init()
+    #def setFileName(self, file_path):
+        #f = open("{}.asm".format(file_path), "w")
+        #self.file = f
 
     def writelines(self, lines):
         lines = map(lambda x: x + "\n", lines)
@@ -334,28 +343,59 @@ class CodeWriter(object):
 
         self.writelines(lines)
 
+    def _push_constant(self, index):
+        lines = []
+        lines.append("@{}".format(index))
+        lines.append("D=A")
+        lines.append("@SP")
+        lines.append("A=M")
+        lines.append("M=D")
+        lines.append("@SP")
+        lines.append("M=M+1")
+        return lines
+
+    def _push_segment(self, segment, index):
+        lines = []
+        lines.append("@{}".format(index))
+        lines.append("D=A")
+        lines.append("@{}".format(SEG_CONS[segment]))
+        lines.append("A=M+D")
+        lines.append("D=M")
+        lines.append("@SP")
+        lines.append("A=M")
+        lines.append("M=D")
+        lines.append("@SP")
+        lines.append("M=M+1")
+        return lines
+
+    def _pop_segment(self, segment, index):
+        lines = []
+        # sp decrement
+        lines.append("@SP")
+        lines.append("M=M-1")
+        # add arg + index
+        lines.append("@{}".format(index))
+        lines.append("D=A")
+        lines.append("@{}".format(SEG_CONS[segment]))
+        lines.append("D=M+D")
+        lines.append("@13")
+        lines.append("M=D")
+        lines.append("@SP")
+        lines.append("A=M")
+        lines.append("D=M")
+        # set (arg + i) sp value
+        lines.append("@13")
+        lines.append("A=M")
+        lines.append("M=D")
+        return lines
+
     def writePushPop(self, op, segment, index):
         lines = []
         if op == "push":
             if segment == "constant":
-                lines.append("@{}".format(index))
-                lines.append("D=A")
-                lines.append("@SP")
-                lines.append("A=M")
-                lines.append("M=D")
-                lines.append("@SP")
-                lines.append("M=M+1")
+                lines.extend(self._push_constant(index))
             elif segment in ("local", "argument", "this", "that"):
-                lines.append("@{}".format(index))
-                lines.append("D=A")
-                lines.append("@{}".format(SEG_CONS[segment]))
-                lines.append("A=M+D")
-                lines.append("D=M")
-                lines.append("@SP")
-                lines.append("A=M")
-                lines.append("M=D")
-                lines.append("@SP")
-                lines.append("M=M+1")
+                lines.extend(self._push_segment(segment, index))
             elif segment == "temp":
                 lines.append("@5")
                 lines.append("D=A")
@@ -388,20 +428,7 @@ class CodeWriter(object):
                 lines.append("M=M+1")
         elif op == "pop":
             if segment in ("local", "argument", "this", "that"):
-                lines.append("@SP")
-                lines.append("M=M-1")
-                lines.append("@{}".format(index))
-                lines.append("D=A")
-                lines.append("@{}".format(SEG_CONS[segment]))
-                lines.append("D=M+D")
-                lines.append("@13")
-                lines.append("M=D")
-                lines.append("@SP")
-                lines.append("A=M")
-                lines.append("D=M")
-                lines.append("@13")
-                lines.append("A=M")
-                lines.append("M=D")
+                lines.extend(self._pop_segment(segment, index))
             elif segment == "temp":
                 lines.append("@SP")
                 lines.append("M=M-1")
@@ -463,6 +490,119 @@ class CodeWriter(object):
         lines.append("D;JNE")
         self.writelines(lines)
 
+    def writeFunction(self, functionName, argsCountstr):
+        lines = []
+        lines.append("({})".format(functionName))
+        argsCount = int(argsCountstr)
+        while argsCount > 0:
+            self._push_constant(0)
+            argsCount -= 1
+        self.writelines(lines)
+
+    def writeCall(self, functionName, args):
+        lines = []
+        return_address = "{}f{}.c{}".format(self.file_name, functionName, self._get_call_count())
+        # add return address sp
+        lines.append("@{}".format(return_address))
+        lines.append("D=A")
+        lines.append("@SP")
+        lines.append("A=M")
+        lines.append("M=D")
+        lines.append("@SP")
+        lines.append("M=M+1")
+        # push segments
+        segments = ["local", "argument", "this", "that"]
+        for segment in segments:
+            self._push_segment(segment, 0)
+        # ARG = SP - n - 5
+        lines.append("@{}".format(5 + int(args)))
+        lines.append("D=A")
+        lines.append("@SP")
+        lines.append("D=M-D")
+        lines.append("@ARG")
+        lines.append("M=D")
+        # LCL = SP
+        lines.append("@SP")
+        lines.append("D=M")
+        lines.append("@LCL")
+        lines.append("M=D")
+        # jump function
+        lines.append("@{}".format(functionName))
+        lines.append("D=M")
+        lines.append("0;JMP")
+        # write return address label
+        lines.append("({})".format(return_address))
+        self.writelines(lines)
+
+    def _set_symbol_value_to_dreg(self, symbol):
+        lines = []
+        lines.append("@{}".format(symbol))
+        lines.append("D=M")
+        return lines
+
+    def _sub_dreg_value(self, index):
+        lines = []
+        lines.append("@{}".format(index))
+        lines.append("D=D-A")
+        return lines
+        
+    def writeReturn(self):
+        lines = []
+        # save lcl address to r13
+        lines.append("@{}".format(SEG_CONS["local"]))
+        lines.append("D=M")
+        lines.append("@R13")
+        lines.append("M=D")
+        # get return address and save to r14
+        lines.append("@5")
+        lines.append("A=D-A")
+        lines.append("D=M") 
+        lines.append("@R14")
+        lines.append("M=D")
+        # return value move
+        lines.append("@SP")
+        lines.append("A=M-1")
+        lines.append("D=M")
+        lines.append("@ARG")
+        lines.append("A=M")
+        lines.append("M=D")
+        lines.append("@ARG")
+        lines.append("D=M+1")
+        lines.append("@SP")
+        lines.append("M=D")
+        # set saved that 
+        lines.extend(self._set_symbol_value_to_dreg("R13"))
+        lines.extend(self._sub_dreg_value(1))
+        lines.append("A=D")
+        lines.append("D=M")
+        lines.append("@THAT")
+        lines.append("M=D")
+        # set saved this
+        lines.extend(self._set_symbol_value_to_dreg("R13"))
+        lines.extend(self._sub_dreg_value(2))
+        lines.append("A=D")
+        lines.append("D=M")
+        lines.append("@THIS")
+        lines.append("M=D")
+        # set saved arg
+        lines.extend(self._set_symbol_value_to_dreg("R13"))
+        lines.extend(self._sub_dreg_value(3))
+        lines.append("A=D")
+        lines.append("D=M")
+        lines.append("@ARG")
+        lines.append("M=D")
+        # set saved lcl
+        lines.extend(self._set_symbol_value_to_dreg("R13"))
+        lines.extend(self._sub_dreg_value(4))
+        lines.append("A=D")
+        lines.append("D=M")
+        lines.append("@LCL")
+        lines.append("M=D")
+        self.writelines(lines)
+        lines.append("@R14")
+        lines.append("A=M")
+        lines.append("0;JMP")
+
     def close(self):
         lines = []
         lines.append("(END)")
@@ -483,8 +623,6 @@ def main():
         parser = Parser(f)
         if not writer:
             writer = CodeWriter(write_file_name)
-        else:
-            writer.set_file_name(write_file_name)
         while True:
             commandType = parser.commandType()
             if commandType == CommandType.C_ARITHMETIC:
@@ -508,7 +646,6 @@ def main():
                 break
         
             parser.advance()
-
     writer.close()
 
 def get_files():

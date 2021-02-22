@@ -180,7 +180,7 @@ class CodeWriter(object):
         self.full_path = name
         self.file_name = name.split("/")[-1]
         self.call_count = 0
-        #self.sys_init()
+        self.sys_init()
 
     def _get_call_count(self):
         count = self.call_count
@@ -528,7 +528,6 @@ class CodeWriter(object):
         lines.append("M=D")
         # jump function
         lines.append("@{}".format(functionName))
-        lines.append("D=M")
         lines.append("0;JMP")
         # write return address label
         lines.append("({})".format(return_address))

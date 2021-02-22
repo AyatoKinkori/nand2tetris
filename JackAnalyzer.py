@@ -90,8 +90,15 @@ class TokenizeError(Exception):
 class JackTokenizer(object):
     def __init__(self, file_):
         self.lines = []
+        comment_line = False
         for line in file_.readlines():
-            self.lines.append(line)
+            if "/*" in line:
+                comment_line = True
+            if "*/" in line:
+                line = line.split("*/")[-1]
+                comment_line = False
+            if not comment_line:
+                self.lines.append(line)
         self._split_tokens()
         self.token_sum = len(self.tokens)
         self.now_token = 0

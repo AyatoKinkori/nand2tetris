@@ -105,11 +105,30 @@ class JackTokenizer(object):
         self._set_token()
 
     def _split_line_include_quote_line(self, line):
-        normalized_line = line.split("\"")
-        string_constant = normalized_line.pop(-2)
-        words = "".join(normalized_line).split(" ")
-        words.insert(-1, "\"{}\"".format(string_constant))
-        return words
+        is_quoted = False
+        splited_line = []
+        w2 = ""
+        for w in line:
+            if is_quoted:
+                w2 += w
+                if w == "\"":
+                    splited_line.append(w2)
+                    is_quoted = False
+                    w2 = ""
+            elif w == "\"":
+                if len(w2) > 0:
+                    splited_line.append(w2)
+                is_quoted = True
+                w2 = "\""
+            elif w == " ":
+                if len(w2) > 0:
+                    splited_line.append(w2)
+                    w2 = ""
+            else:
+                w2 += w
+        if len(w2) > 0:
+            splited_line.append(w2)
+        return splited_line
 
     def _split_tokens(self):
         tokens = []

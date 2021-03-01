@@ -87,6 +87,9 @@ class FileParseError(Exception):
 class TokenizeError(Exception):
     pass
 
+class CompilationError(Exception):
+    pass
+
 class JackTokenizer(object):
     def __init__(self, file_):
         self.lines = []
@@ -228,48 +231,275 @@ class CompilationEngine(object):
     def __init__(self, name):
         f = open("{}.xml".format(name), "w") 
         self.file = f
+        self.lines = []
+        for line in f.readlines():
+            self.lines.append(line)
+        self.now_line = 0
+        self.write_lines = []
 
-    def compile_token(self, token, tokenType):
-        if tokenType == TokenType.KEYWORD:
-            self.compile_keyword(token)
+    def advance(self):
+        self.now_line += 1
+
+    def get_line(self):
+        return self.lines[now_line]
+
+    def _get_token(self, line):
+        return line.split(" ")[1]
+
+    def _get_tag(self, line):
+        return line.split(">")[0].strip("<")
+
+    def _start_non_terminal(self, non_term):
+        self.write_lines.append("<{}>".format(non_term))
+
+    def _end_non_terminal(self, non_term):
+        self.write_lines.append("</{}>".format(non_term))
+
+    def _write_line(self, line):
+        self.write_lines.append(line)
+
+    def is_type(self, line):
+        if self._get_tag(self.now_line) not in ("keyword", "identifier"):
+            return False
+        if self._get_token(self.now_line) not in ("int", "char", "boolean"):
+            return False
+        return True
+        
+    def compile(self):
+        line = self.lines[self.now_line]
+        if line.strip("<").strip(">") != "token":
+            raise CompilationError("xml is not started with 'tokens'")
+        self.advance()
+        self.compileClass()
+        self.lines[self.now_line]
+        if line.strip("<").strip(">") != "/token":
+            raise CompilationError("xml is not end with '/tokens'")
 
     def compileClass(self):
-        pass
+        token = self._get_token(self.get_line())
+        if token != "class":
+            raise CompilationError("programm is not started with 'class'")
+        self._start_non_terminal("class")
+        self.advance()
+        self._compileClassName()
+        self.advance()
+        if self.get_token(self.now_line) != "{":
+            raise CompilationError("class body is not started with '{'")
+        self._write_line(self.now_line)
+        self.advance()
+        while self.now_line != "}":
+            # compile class variable and subroutineDec
+            if self._get_token(self.now_line) in ("static", "field"):
+                self.compileClassVarDec()
+            elif self._get_token(self.now_line) in ("constructor", "function", "method"):
+                self.compileSubroutineDec()
+            else:
+                raise CompilationError("contain disable definition in class")
+        self._write_line(self.now_line)
+        self._end_non_terminal("class")
 
-    def compile_keyword(self, token):
-        if token == KeywordType.CLASS:
-            self.compileClass()
-        elif token in (KeywordType.METHOD, KeywordType.FUNCTION, KeywordType.CONSTRUCTOR):
-            self.compileSubroutine(token)
-        elif token in (KeywordType.STATIC, FIELD):
-            self.compileClassVarDec(token)
-        elif token in (KeywordType.VAR):
+    def compileClassVarDec(self):
+        if self._get_token(self.now_line) not in ("static", "field"):
+            raise CompilationError("class var dec is not started with 'static' or 'field'")
+        self._start_non_terminal("classVarDec")
+        self._write_line(self.now_line)
+        self.advance()
+        if self._get_tag(self.now_line) not in ("keyword", "identifier"):
+            raise CompilationError("type is supported 'keyword' or 'identifier'")
+        self._write_line(self.now_line)
+        self.advance()
+        if self._get_tag(self.now_line) != "identifier":
+            raise CompilationError("'varName' need to be identifier") 
+        self.write_line(self.now_line)
+        self.advance()
+        while self._get_tag(self.now_line) == "identifier" || self.get_token(self.now_line) == ",":
+            self.write_line(self.now_line)
+            self.advance()
+        if self._get_token(self.now_line) != ";":
+            raise CompilationError("';' need end of class var") 
+	self.write_line(self.now_line)
+        self.advance()
+        self._end_non_terminal("classVarDec")
+
+    def compileSubroutineDec(self):
+        self._start_non_terminal("subroutineDec")
+        self.write_line(self.now_line)
+        self.advance()
+        if self._get_token(self.now_line) not in ("void", "type"):
+            raise CompilationError("subroutine return type undefined")
+        self.write_line(self.now_line)
+        self.advance()
+        if self._get_tag(self.now_line) != "identifier":
+            raise CompilationError("subroutine needs subroutineName")
+        self.write_line(self.now_line)
+        self.advance()
+        if self._get_tag(self.now_line) "= "(":
+            raise CompilationError("subroutine needs '('")
+        self.write_line(self.now_line)
+        self.advance()
+        self.compileParameterList()
+        self.write_line(self.now_line)
+        self.advance()
+        self.compileSubroutineBody()
+        self._end_non_terminal("subroutineDec")
+
+    def compileSubroutineBody(self):
+        self._start_non_terminal("subroutineBody")
+        if self._get_token(self.now_line) != "{";
+            raise CompilationError("subroutine body needs '{'")
+        self.write_line(self.now_line)
+        self.advance()
+        while self._get_token(self.now_line) == "var":
             self.compileVarDec()
-        elif token == KeywordType.DO:
-            self.compileDo()
-        elif token == KeywordType.LET:
+        self.compileStatements()
+        self._end_non_terminal("subroutineBody")
+
+    def compileVarDec(self):
+        self._start_non_terminal("varDec")
+        if self._get_token(self.now_line) != "var":
+            raise CompilationError("var dec needs to be started with 'var'")
+        self.write_line(self.now_line)
+        self.advance()
+        if self._get_tag(self.now_line) not in ("keyword", "identifier"):
+            raise CompilationError("type is supported 'keyword' or 'identifier'")
+        self.write_line(self.now_line)
+        self.advance()
+        if self._get_tag(self.now_line) != "identifier":
+            raise CompilationError("varName is supported only 'identifier'")
+        self.write_line(self.now_line)
+        self.advance()
+        while self._get_token(self.now_line) == ",":
+            self.write_line(self.now_line)
+            self.advance()
+            if self._get_tag(self.now_line) != "identifier":
+                raise CompilationError("varName is supported only 'identifier'")
+            self.write_line(self.now_line)
+            self.advance()
+        if self._get_token(self.now_line) != ";":
+            raise CompilationError("varName needs to be ended with ';'")
+        self.write_line(self.now_line)
+        self.advance()
+        self._end_non_terminal("varDec")
+
+    def compileStatements(self):
+        self._start_non_terminal("statements")
+        while self.is_statement():
+            self.compileStatement()
+        self._end_non_terminal("statements")
+
+    def is_statement(self):
+        token = self._get_token(self.now_line)
+        if token in ("let", "if", "while", "do", "return"):
+            return True
+        return False
+
+    def compileStatement(self):
+        token = self._get_token(self.now_line)
+        if token == "let":
             self.compileLet()
-        elif token == KeywordType.WHILE:
+        elif token == "do":
+            self.compileDo()
+        elif token == "while":
             self.compileWhile()
-        elif token == KeywordType.RETURN:
+        elif token == "return":
             self.compileReturn()
-        elif token in (KeywordType.IF, KeywordType.ELSE):
+        elif token == "if":
             self.compileIf()
+
+    def compileLet(self):
+        self._start_non_terminal("letStatement")
+        self.write_line(self.now_line)
+        self.advance()
+        if self._get_tag(self.now_line) != "identifier":
+            raise CompilationError("varName is supported only 'identifier'")
+        self.write_line(self.now_line)
+        self.advance()
+        if self._get_tag(self.now_line) == "[":
+            self.write_line(self.now_line)
+            self.advance()
+            self.compileExpression()
+        if self._get_token(self.now_line) != "=":
+            raise CompilationError("let needs '=' to assign variable")
+        self.write_line(self.now_line)
+        self.advance()
+        self.compileExpression()
+        if self._get_token(self.now_line) != ";":
+            raise CompilationError("let needs ';' to end let")
+        self.write_line(self.now_line)
+        self.advance()
+        self._end_non_terminal("letStatement")
+
+    def compileExpression(self):
+        self._start_non_terminal("expression")
+        self.compileTerm()
+        while self.is_op(self.now_line):
+            self.compileOp()
+            self.compileTerm()
+        self._end_non_terminal("expression")
+
+    def compileOp():
+        if self._get_token(self.now_line) not in ("+", "-", "*", "/", "&", "|", "<", ">", "="):
+            raise CompiletaionError("{} is not supported opration".format(self._get_token(self.now_line)))
+        self.write_line(self.now_line)
+        self.advance()
+
+    def compileTerm(self):
+        self._start_non_terminal("term")
+        if self.is_unaryOp():
+            self.write_line(self.now_line)
+            self.advance()
+            self.compileTerm()
+        elif self._get_tag(self.now_line) in ("integerConstant", "stringConstant", "keywordConstant"):
+            self.write_line(self.now_line)
+            self.advance()
+        else:
+            pass
+        self._end_non_terminal("term")
+
+    def is_unaryOp(self):
+        if self._get_token(self.now_line) in ("-", "~"):
+             return True
+        return False
+        
+    def compileParameterList(self):
+        self._start_non_terminal("parameterList")
+        if self._get_tag(self.now_line) not in ("keyword", "identifier"):
+            pass
+        else:
+            self.write_line(self.now_line)
+            self.advance()
+            if self._get_tag(self.now_line) not "identifier":
+                raise CompilationError("varName is supported 'identifier'")
+            self.write_line(self.now_line)
+            self.advance()
+            while self._get_token(self.now_line) == ",":
+                self.write_line(self.now_line)
+                self.advance()
+                self.write_line(self.now_line)
+                self.advance()
+        self._end_non_terminal("parameterList")
+
+    def _compileClassName(self):
+        tag = self._get_tag(self.get_line())
+        if tag != "identifier":
+            raise CompilationError("'class' is undefined 'className'")
+        self._write_line(self.get_line())
+        
+
 
 def write(wf, content):
     wf.write(content + "\n")
        
 
-def main():
-    files = get_files()
-    if not files:
-        raise FileNotExistError("not passed target files")
+def tokenizer(files):
     wf = None
+    tokenized_file_list = []
     for file_path in files:
         f = file_open(file_path)
         tokenizer = JackTokenizer(f)
         write_file_name = file_path.rstrip(".jack")
-        wf = open("{}_T.xml".format(write_file_name), "w")
+        write_file_path = "{}_T.xml".format(write_file_name)
+        wf = open(write_file_path, "w")
         write(wf, "<tokens>")
         #compile_engine = CompilationEngine(write_file_name)
         while True:
@@ -294,6 +524,26 @@ def main():
             tokenizer.advance()
         write(wf, "</tokens>")
         wf.close()
+        tokenized_file_list.append(write_file_path)
+    return tokenized_file_list
+
+
+def compilate(files):
+    for file_path in files:
+        f = file_open(file_path)
+        compile_engine = CompilationEngine(f)
+        write_file_name = file_path.rstrip(".xml")
+        write_file_path = "{}_C.xml".format(write_file_name)
+        wf = open(write_file_path, "w")
+
+
+def main():
+    files = get_files()
+    if not files:
+        raise FileNotExistError("not passed target files")
+    tokenized_file_list = tokenizer()
+    compilate(tokenized_file_list)
+
 
 def get_files():
     path = sys.argv[1]

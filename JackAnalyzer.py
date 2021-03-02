@@ -240,13 +240,15 @@ class CompilationEngine(object):
     def advance(self):
         self.now_line += 1
 
-    def get_line(self):
-        return self.lines[now_line]
+    def get_line(self, line_num):
+        return self.lines[line_num]
 
-    def _get_token(self, line):
+    def _get_token(self, line_num):
+        line = self.get_line(line_num)
         return line.split(" ")[1]
 
-    def _get_tag(self, line):
+    def _get_tag(self, line_num):
+        line = self.get_line(line_num)
         return line.split(">")[0].strip("<")
 
     def _start_non_terminal(self, non_term):
@@ -276,7 +278,7 @@ class CompilationEngine(object):
             raise CompilationError("xml is not end with '/tokens'")
 
     def compileClass(self):
-        token = self._get_token(self.get_line())
+        token = self._get_token(self.now_line)
         if token != "class":
             raise CompilationError("programm is not started with 'class'")
         self._start_non_terminal("class")
@@ -354,6 +356,37 @@ class CompilationEngine(object):
         self.compileStatements()
         self._end_non_terminal("subroutineBody")
 
+    def compileSubroutineCall(self):
+        self._start_non_terminal("subroutineCall")
+        self.write_line(self.now_line)
+        self.advance()
+        if self._get_token(self.now_line) == "(":
+            self.write_line(self.now_line)
+            self.advance()
+            self.compileExpressionList()
+            self.write_line(self.now_line)
+            self.advance()
+        elif self._get_token(self.now_line) == ".":
+            self.write_line(self.now_line)
+            self.advance()
+            self.write_line(self.now_line)
+            self.advance()
+            self.write_line(self.now_line)
+            self.advance()
+            self.compileExpressionList()
+            self.write_line(self.now_line)
+            self.advance()
+        self._end_non_terminal("subroutineCall")
+
+    def compileExpressionList(self):
+        self._start_non_terminal("expressionList")
+        while self._get_token(self.now_line) != ")":
+            self.compileExpression()
+            if self._get_token(self.now_line) == ",":
+                self.write_line(self.now_line)
+                self.advance()
+        self._end_non_terminal("expressionList")
+
     def compileVarDec(self):
         self._start_non_terminal("varDec")
         if self._get_token(self.now_line) != "var":
@@ -429,6 +462,87 @@ class CompilationEngine(object):
         self.advance()
         self._end_non_terminal("letStatement")
 
+    def compileIf(self):
+        self._start_non_terminal("ifStatement")
+        self.write_line(self.now_line)
+        self.advance()
+        if self._get_token(self.now_line) != "(":
+            raise CompilationError("if needs '(' to describe condition")
+        self.write_line(self.now_line)
+        self.advance()
+        self.compileExpression()
+        if self._get_token(self.now_line) != ")":
+            raise CompilationError("if needs ')' to describe condition")
+        self.write_line(self.now_line)
+        self.advance()
+        if self._get_token(self.now_line) != "{":
+            raise CompilationError("if needs '{' to provide statements")
+        self.write_line(self.now_line)
+        self.advance()
+        self.compileStatements()
+        if self._get_token(self.now_line) != "}":
+            raise CompilationError("if needs '}' to provide statements")
+        self.write_line(self.now_line)
+        self.advance()
+        if self._get_token(self.now_line) == "else":
+            self.write_line(self.now_line)
+            self.advance()
+            if self._get_token(self.now_line) != "{":
+                raise CompilationError("else needs '{' to provide statements")
+            self.write_line(self.now_line)
+            self.advance()
+            self.compileStatements()
+            if self._get_token(self.now_line) != "}":
+                raise CompilationError("else needs '}' to provide statements")
+            self.write_line(self.now_line)
+            self.advance()
+        self._end_non_terminal("ifStatement")
+
+    def compileWhile(self):
+        self._start_non_terminal("whileStatement")
+        self.write_line(self.now_line)
+        self.advance()
+        if self._get_token(self.now_line) != "(":
+            raise CompilationError("while needs '(' to describe condition")
+        self.write_line(self.now_line)
+        self.advance()
+        self.compileExpression()
+        if self._get_token(self.now_line) != ")":
+            raise CompilationError("while needs ')' to describe condition")
+        self.write_line(self.now_line)
+        self.advance()
+        if self._get_token(self.now_line) != "{":
+            raise CompilationError("while needs '{' to provide statements")
+        self.write_line(self.now_line)
+        self.advance()
+        self.compileStatements()
+        if self._get_token(self.now_line) != "}":
+            raise CompilationError("while needs '}' to provide statements")
+        self.write_line(self.now_line)
+        self.advance()
+        self._end_non_terminal("whileStatement")
+
+    def compileDo(self):
+        self._start_non_terminal("doStatement")
+        self.write_line(self.now_line)
+        self.advance()
+        self.compileSubroutine()
+        if self._get_token(self.now_line) != ";":
+            raise CompilationError("do needs ';' to describe condition")
+        self.write_line(self.now_line)
+        self.advance()
+        self._end_non_terminal("doStatement")
+
+    def compileReturn(self):
+        self._start_non_terminal("returnStatement")
+        self.write_line(self.now_line)
+        self.advance()
+        if self._get_token(self.now_line) != ";":
+            self.cpmpileExpression()
+        self.write_line(self.now_line)
+        self.advance()
+        self._end_non_terminal("returnStatement")
+
     def compileExpression(self):
         self._start_non_terminal("expression")
         self.compileTerm()
@@ -452,8 +566,31 @@ class CompilationEngine(object):
         elif self._get_tag(self.now_line) in ("integerConstant", "stringConstant", "keywordConstant"):
             self.write_line(self.now_line)
             self.advance()
+        elif self._get_token(self.now_line) == "(":
+            self.write_line(self.now_line)
+            self.advance()
+            self.compileExpression()
+            self.write_line(self.now_line)
+            self.advance()
         else:
-            pass
+            if self._get_tag(self.now_line) != "identifier":
+                raise CompilationError("{} can not use variable, subroutineName".format(self._get_tag(self.now_line))
+            next_line = self.now_line + 1
+            next_line_content = self.get_line(next_line)
+            token = self._get_token(next_line_content)
+            if token == "[":
+                self.write_line(self.now_line)
+                self.advance()
+                self.write_line(self.now_line)
+                self.compileExpression()
+                self.write_line(self.now_line)
+                self.advance()
+            elif token in ("(", "."):
+                self.compileSubroutineCall()
+            else:
+                self.write_line(self.now_line)
+                self.advance()
+            
         self._end_non_terminal("term")
 
     def is_unaryOp(self):
@@ -480,7 +617,7 @@ class CompilationEngine(object):
         self._end_non_terminal("parameterList")
 
     def _compileClassName(self):
-        tag = self._get_tag(self.get_line())
+        tag = self._get_tag(self.now_line)
         if tag != "identifier":
             raise CompilationError("'class' is undefined 'className'")
         self._write_line(self.get_line())

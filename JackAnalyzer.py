@@ -261,10 +261,10 @@ class CompilationEngine(object):
         return line.split(">")[0].strip("<")
 
     def _start_non_terminal(self, non_term):
-        self.write_lines.append("<{}>".format(non_term))
+        self.write_lines.append("<{}>\n".format(non_term))
 
     def _end_non_terminal(self, non_term):
-        self.write_lines.append("</{}>".format(non_term))
+        self.write_lines.append("</{}>\n".format(non_term))
 
     def write_line(self, line):
         self.write_lines.append(self.lines[line])
@@ -296,6 +296,7 @@ class CompilationEngine(object):
         if token != "class":
             raise CompilationError("programm is not started with 'class'")
         self._start_non_terminal("class")
+        self.write_line(self.now_line)
         self.advance()
         self._compileClassName()
         self.advance()
@@ -358,8 +359,6 @@ class CompilationEngine(object):
         self.write_line(self.now_line)
         self.advance()
         self.compileSubroutineBody()
-        self.write_line(self.now_line)
-        self.advance()
         self._end_non_terminal("subroutineDec")
 
     def compileSubroutineBody(self):
@@ -371,10 +370,14 @@ class CompilationEngine(object):
         while self._get_token(self.now_line) == "var":
             self.compileVarDec()
         self.compileStatements()
+        if self._get_token(self.now_line) != "}":
+            raise CompilationError("subroutine body needs '}'")
+        self.write_line(self.now_line)
+        self.advance()
         self._end_non_terminal("subroutineBody")
 
     def compileSubroutineCall(self):
-        self._start_non_terminal("subroutineCall")
+        #self._start_non_terminal("subroutineCall")
         self.write_line(self.now_line)
         self.advance()
         if self._get_token(self.now_line) == "(":
@@ -393,7 +396,7 @@ class CompilationEngine(object):
             self.compileExpressionList()
             self.write_line(self.now_line)
             self.advance()
-        self._end_non_terminal("subroutineCall")
+        #self._end_non_terminal("subroutineCall")
 
     def compileExpressionList(self):
         self._start_non_terminal("expressionList")
@@ -592,6 +595,9 @@ class CompilationEngine(object):
             self.compileExpression()
             self.write_line(self.now_line)
             self.advance()
+        elif self.is_keyword_constant():
+            self.write_line(self.now_line)
+            self.advance()
         else:
             if self._get_tag(self.now_line) != "identifier":
                 raise CompilationError("{} can not use variable, subroutineName".format(self._get_tag(self.now_line)))
@@ -615,6 +621,11 @@ class CompilationEngine(object):
 
     def is_unaryOp(self):
         if self._get_token(self.now_line) in ("-", "~"):
+             return True
+        return False
+
+    def is_keyword_constant(self):
+        if self._get_token(self.now_line) in ("true", "false", "null", "this"):
              return True
         return False
         

@@ -277,7 +277,7 @@ class CompilationEngine(object):
         return True
 
     def is_op(self, line):
-        if self._get_token(line) not in ("+", "-", "*", "/", "&", "|", "<", ">", "="):
+        if self._get_token(line) not in [html.escape(x) for x in ("+", "-", "*", "/", "&", "|", "<", ">", "=")]:
             return False
         return True
         
@@ -474,7 +474,6 @@ class CompilationEngine(object):
             self.write_line(self.now_line)
             self.advance()
         if self._get_token(self.now_line) != "=":
-            print(self._get_token(self.now_line))
             raise CompilationError("let needs '=' to assign variable")
         self.write_line(self.now_line)
         self.advance()
@@ -575,7 +574,7 @@ class CompilationEngine(object):
         self._end_non_terminal("expression")
 
     def compileOp(self):
-        if self._get_token(self.now_line) not in ("+", "-", "*", "/", "&", "|", "<", ">", "="):
+        if self._get_token(self.now_line) not in [html.escape(x) for x in ("+", "-", "*", "/", "&", "|", "<", ">", "=")]:
             raise CompiletaionError("{} is not supported opration".format(self._get_token(self.now_line)))
         self.write_line(self.now_line)
         self.advance()
@@ -608,6 +607,7 @@ class CompilationEngine(object):
                 self.write_line(self.now_line)
                 self.advance()
                 self.write_line(self.now_line)
+                self.advance()
                 self.compileExpression()
                 self.write_line(self.now_line)
                 self.advance()

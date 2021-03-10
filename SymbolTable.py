@@ -14,17 +14,17 @@ class SymbolTable(object):
         self.subroutine_index = 0
 
     def is_class_table(self, kind):
-        if kind in ("STATIC", "FIELD"):
+        if kind in ("static", "field"):
             return True
         return False
 
     def is_subroutine_table(self, kind):
-        if kind in ("ARG", "VAR"):
+        if kind in ("arg", "var"):
             return True
         return False
 
     def define(self, name, type, kind):
-        self.is_class_table(kind)
+        if self.is_class_table(kind):
             self.class_table[name] = {"type": type, "kind": kind, "index": self.class_index}
             self.class_index += 1
         elif self.is_subroutine_table(kind):
@@ -48,30 +48,30 @@ class SymbolTable(object):
 
     def kindOf(self, name):
         for k, v in self.subroutine_table.items():
-	    if name == k:
-	        return v["kind"]
+            if name == k:
+                return v["kind"]
         for k, v in self.class_table.items():
-	    if name == k:
-	        return v["kind"]
+            if name == k:
+                return v["kind"]
 
         return None
 
     def typeOf(self, name):
         for k, v in self.subroutine_table.items():
-	    if name == k:
-	        return v["type"]
+            if name == k:
+                return v["type"]
         for k, v in self.class_table.items():
-	    if name == k:
-	        return v["type"]
+            if name == k:
+                return v["type"]
 
         return None
 
     def indexOf(self, name):
         for k, v in self.subroutine_table.items():
-	    if name == k:
-	        return v["index"]
+            if name == k:
+                return v["index"]
         for k, v in self.class_table.items():
-	    if name == k:
-	        return v["index"]
+            if name == k:
+                return v["index"]
 
         return None

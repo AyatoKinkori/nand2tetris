@@ -4,6 +4,8 @@ import re
 import sys
 from enum import Enum
 
+from SymbolTable import SymbolTable
+
 IDENTIFIER_RE = re.compile("^[^\"\d]+\w*")
 INTEGER_CONSTANT_RE = re.compile("^\d+")
 STRING_CONSTANT_RE = re.compile("^\"[^\"\n]+\"")
@@ -238,6 +240,7 @@ class CompilationEngine(object):
         self.write_file = wf
         self.now_line = 0
         self.write_lines = []
+        self.symbol_table = SymbolTable()
 
     def write(self):
         self.write_file.writelines(self.write_lines)
@@ -269,6 +272,9 @@ class CompilationEngine(object):
     def write_line(self, line):
         self.write_lines.append(self.lines[line])
 
+    def append_line(self, s):
+        self.write_lines.append(s + "\n")
+
     def is_type(self, line):
         if self._get_tag(self.now_line) not in ("keyword", "identifier"):
             return False
@@ -298,7 +304,7 @@ class CompilationEngine(object):
         self._start_non_terminal("class")
         self.write_line(self.now_line)
         self.advance()
-        self._compileClassName()
+        class_name = self._compileClassName()
         self.advance()
         if self._get_token(self.now_line) != "{":
             raise CompilationError("class body is not started with '{'")
@@ -309,6 +315,8 @@ class CompilationEngine(object):
             if self._get_token(self.now_line) in ("static", "field"):
                 self.compileClassVarDec()
             elif self._get_token(self.now_line) in ("constructor", "function", "method"):
+                self.symbol_table.startSubroutine()
+                self.symbol_table.define("this", class_name, "arg")
                 self.compileSubroutineDec()
             else:
                 raise CompilationError("contain disable definition in class")
@@ -320,18 +328,26 @@ class CompilationEngine(object):
         if self._get_token(self.now_line) not in ("static", "field"):
             raise CompilationError("class var dec is not started with 'static' or 'field'")
         self._start_non_terminal("classVarDec")
+        kind = self._get_token(self.now_line)
         self.write_line(self.now_line)
         self.advance()
         if self._get_tag(self.now_line) not in ("keyword", "identifier"):
             raise CompilationError("type is supported 'keyword' or 'identifier'")
+        type = self._get_token(self.now_line)
         self.write_line(self.now_line)
         self.advance()
         if self._get_tag(self.now_line) != "identifier":
             raise CompilationError("'varName' need to be identifier") 
-        self.write_line(self.now_line)
+        var_name = self._get_token(self.now_line)
+        self.symbol_table.define(var_name, type, kind)
+        self.append_line("<identified>defined: {} {} {} {}</identifier>".format(kind, type, var_name, self.symbol_table.varCount(kind)))
         self.advance()
-        while (self._get_tag(self.now_line) == "identifier" or self._get_token(self.now_line) == ","):
+        while (self._get_token(self.now_line) == ","):
             self.write_line(self.now_line)
+            self.advance()
+            var_name = self._get_token(self.now_line)
+            self.symbol_table.define(var_name, type, kind)
+            self.append_line("<identified>defined: {} {} {} {}</identifier>".format(kind, type, var_name, self.symbol_table.varCount(kind)))
             self.advance()
         if self._get_token(self.now_line) != ";":
             raise CompilationError("';' need end of class var") 
@@ -411,22 +427,28 @@ class CompilationEngine(object):
         self._start_non_terminal("varDec")
         if self._get_token(self.now_line) != "var":
             raise CompilationError("var dec needs to be started with 'var'")
+        kind = self._get_token(self.now_line)
         self.write_line(self.now_line)
         self.advance()
         if self._get_tag(self.now_line) not in ("keyword", "identifier"):
             raise CompilationError("type is supported 'keyword' or 'identifier'")
+        type = self._get_token(self.now_line)
         self.write_line(self.now_line)
         self.advance()
         if self._get_tag(self.now_line) != "identifier":
             raise CompilationError("varName is supported only 'identifier'")
-        self.write_line(self.now_line)
+        var_name = self._get_token(self.now_line)
+        self.symbol_table.define(var_name, type, kind)
+        self.append_line("<identifier>defined: {} {} {} {}</identifier>".format(kind, type, var_name, self.symbol_table.varCount(kind)))
         self.advance()
         while self._get_token(self.now_line) == ",":
             self.write_line(self.now_line)
             self.advance()
             if self._get_tag(self.now_line) != "identifier":
                 raise CompilationError("varName is supported only 'identifier'")
-            self.write_line(self.now_line)
+            var_name = self._get_token(self.now_line)
+            self.symbol_table.define(var_name, type, kind)
+            self.append_line("<identifier>defined: {} {} {} {}</identifier>".format(kind, type, var_name, self.symbol_table.varCount(kind)))
             self.advance()
         if self._get_token(self.now_line) != ";":
             raise CompilationError("varName needs to be ended with ';'")
@@ -465,7 +487,11 @@ class CompilationEngine(object):
         self.advance()
         if self._get_tag(self.now_line) != "identifier":
             raise CompilationError("varName is supported only 'identifier'")
-        self.write_line(self.now_line)
+        var_name = self._get_token(self.now_line)
+        kind = self.symbol_table.kindOf(var_name)
+        type = self.symbol_table.typeOf(var_name)
+        index = self.symbol_table.typeOf(var_name)
+        self.append_line("<identifier>used: {} {} {} {}</identifier>".format(kind, type, var_name, index))
         self.advance()
         if self._get_token(self.now_line) == "[":
             self.write_line(self.now_line)
@@ -604,7 +630,12 @@ class CompilationEngine(object):
             next_line_content = self.get_line(next_line)
             token = self._get_token(next_line)
             if token == "[":
-                self.write_line(self.now_line)
+                # varName [ expression ]
+                var_name = self._get_token(self.now_line)
+                kind = self.symbol_table.kindOf(var_name)
+                type = self.symbol_table.typeOf(var_name)
+                index = self.symbol_table.typeOf(var_name)
+                self.append_line("<identifier>used: {} {} {} {}</identifier>".format(kind, type, var_name, index))
                 self.advance()
                 self.write_line(self.now_line)
                 self.advance()
@@ -612,9 +643,15 @@ class CompilationEngine(object):
                 self.write_line(self.now_line)
                 self.advance()
             elif token in ("(", "."):
+                # subroutinecall
                 self.compileSubroutineCall()
             else:
-                self.write_line(self.now_line)
+                # varName
+                var_name = self._get_token(self.now_line)
+                kind = self.symbol_table.kindOf(var_name)
+                type = self.symbol_table.typeOf(var_name)
+                index = self.symbol_table.typeOf(var_name)
+                self.append_line("<identifier>used: {} {} {} {}</identifier>".format(kind, type, var_name, index))
                 self.advance()
             
         self._end_non_terminal("term")
@@ -631,21 +668,28 @@ class CompilationEngine(object):
         
     def compileParameterList(self):
         self._start_non_terminal("parameterList")
+        kind = "arg"
         if self._get_tag(self.now_line) not in ("keyword", "identifier"):
             pass
         else:
             self.write_line(self.now_line)
+            type = self._get_token(self.now_line)
             self.advance()
             if self._get_tag(self.now_line) != "identifier":
                 raise CompilationError("varName is supported 'identifier'")
-            self.write_line(self.now_line)
+            var_name = self._get_token(self.now_line)
+            self.symbol_table.define(var_name, type, kind)
+            self.append_line("<identifier>defined: {} {} {} {}</identifier>".format(kind, type, var_name, self.symbol_table.varCount(kind)))
             self.advance()
             while self._get_token(self.now_line) == ",":
                 self.write_line(self.now_line)
                 self.advance()
                 self.write_line(self.now_line)
+                type = self._get_token(self.now_line)
                 self.advance()
-                self.write_line(self.now_line)
+                var_name = self._get_token(self.now_line)
+                self.symbol_table.define(var_name, type, kind)
+                self.append_line("<identifier>defined: {} {} {} {}</identifier>".format(kind, type, var_name, self.symbol_table.varCount(kind)))
                 self.advance()
         self._end_non_terminal("parameterList")
 
@@ -654,6 +698,7 @@ class CompilationEngine(object):
         if tag != "identifier":
             raise CompilationError("'class' is undefined 'className'")
         self.write_line(self.now_line)
+        return self._get_token(self.now_line)
         
 
 

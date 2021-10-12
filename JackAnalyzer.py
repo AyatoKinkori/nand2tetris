@@ -5,6 +5,7 @@ import sys
 from enum import Enum
 
 from SymbolTable import SymbolTable
+from VMWriter import VMWriter
 
 IDENTIFIER_RE = re.compile("^[^\"\d]+\w*")
 INTEGER_CONSTANT_RE = re.compile("^\d+")
@@ -236,10 +237,7 @@ class CompilationEngine(object):
         self.lines = []
         for line in f.readlines():
             self.lines.append(line)
-        wf = open("{}_C.xml".format(path.split(".")[0]), "w") 
-        self.write_file = wf
         self.now_line = 0
-        self.write_lines = []
         self.symbol_table = SymbolTable()
 
     def write(self):
@@ -301,14 +299,12 @@ class CompilationEngine(object):
         token = self._get_token(self.now_line)
         if token != "class":
             raise CompilationError("programm is not started with 'class'")
-        self._start_non_terminal("class")
-        self.write_line(self.now_line)
         self.advance()
         class_name = self._compileClassName()
+        self.writer = VMWriter(class_name)
         self.advance()
         if self._get_token(self.now_line) != "{":
             raise CompilationError("class body is not started with '{'")
-        self.write_line(self.now_line)
         self.advance()
         while self._get_token(self.now_line) != "}":
             # compile class variable and subroutineDec
